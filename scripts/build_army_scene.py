@@ -131,10 +131,10 @@ def banners() -> list[ET.Element]:
     heads, so they never mask a humanoid from the elevated eye.
     """
     out = []
-    order = ["kalarisena_hero", "pragya_velvet"]
+    order = ["kalarisena_hero"]          # fence = KALARISENA (mats carry PRAGYA)
     # One continuous perimeter enclosing the ENTIRE training ground: front
     # courts and every backfield block inside a single branded boundary.
-    HX, FRONT_Y, BACK_Y = 26.0, -12.0, 52.0
+    HX, FRONT_Y, BACK_Y = 27.5, -8.0, 54.0
     # quats: rotate the plane's +z normal to face the arena interior
     FACE_S = "0.7071 0.7071 0 0"      # normal -> -y  (back wall, faces the camera)
     FACE_N = "0.7071 -0.7071 0 0"     # normal -> +y  (front wall, faces inward)
@@ -144,7 +144,7 @@ def banners() -> list[ET.Element]:
     def run_x(yline, quat, x0, x1, start_i=0):
         x, i = x0, start_i
         while True:
-            nm = order[i % 2]
+            nm = order[i % len(order)]
             w = BANNER_H * BANNER_ASPECT[nm] / 2.0
             if x + 2 * w > x1:
                 break
@@ -158,7 +158,7 @@ def banners() -> list[ET.Element]:
     def run_y(xline, quat, y0, y1, start_i=1):
         y, i = y0, start_i
         while True:
-            nm = order[i % 2]
+            nm = order[i % len(order)]
             w = BANNER_H * BANNER_ASPECT[nm] / 2.0
             if y + 2 * w > y1:
                 break

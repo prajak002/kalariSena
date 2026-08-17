@@ -45,8 +45,8 @@ from src.sim.conventions import quat_xyzw_to_wxyz
 from src.sim.mujoco_runtime import select_gl_backend
 
 MOTION_DIR = "data/motions_retargeted"
-SCENE = "assets/unitree_g1/army_240.xml"
-N_ROBOTS = 240
+SCENE = "assets/unitree_g1/army_576.xml"
+N_ROBOTS = 576
 POSE_PLAYBACK = 0.16       # slow oscillation around a held stance, not clip playback
 
 
@@ -167,35 +167,23 @@ def formation(n: int):
     the rear rank is never hidden behind the front one from an elevated eye, which
     is the same trick the single-block version used, applied per box.
     """
+    # Nine separate 8x8 troupes in a 3x3 grid: 576 humanoids, one arena.
+    # Columns carry the training level (left=beginner, centre=defense,
+    # right=attack) so clip families stay coherent without any floor markings.
     pos, yaw, zone = [], [], []
     rng = np.random.default_rng(7)
-    per = n // len(ZONE_ORDER)
-    for zk in ZONE_ORDER:
-        cx = ZONE_CX[zk]
-        # Front court: the showcase ranks the camera visits (unchanged layout).
-        front = min(per, 10)
-        for i in range(front):
-            r, c = divmod(i, 5)
-            x = cx + (c - 2.0) * 1.85 + (0.92 if r else 0.0)
-            y = -1.55 + r * 3.10
-            pos.append([x, y, 0.0])
-            yaw.append(-90.0 + float(rng.uniform(-11.0, 11.0)))   # -90 faces -y
-            zone.append(zk)
-        # Backfield: parade blocks receding toward the monument skyline, 7-wide
-        # ranks with clear corridors between blocks, tighter jitter so the deep
-        # field reads as drilled formation rather than crowd.
-        rest = per - front
-        block_y0, k = 16.0, 0
-        while k < rest:
-            for i in range(min(35, rest - k)):
-                r, c = divmod(k + i - (k // 35) * 35, 7)
-                x = cx + (c - 3.0) * 1.7 + (0.85 if r % 2 else 0.0)
-                y = block_y0 + r * 2.9
+    SP = 1.65                                  # rank/file pitch inside a troupe
+    COLS = {-17.0: "beginner", 0.0: "defense", 17.0: "attack"}
+    ROWS_Y = [2.0, 19.0, 36.0]                 # troupe front edges, 3 deep
+    for by in ROWS_Y:
+        for bx, zk in COLS.items():
+            for i in range(64):
+                r, c = divmod(i, 8)
+                x = bx + (c - 3.5) * SP
+                y = by + r * SP
                 pos.append([x, y, 0.0])
-                yaw.append(-90.0 + float(rng.uniform(-5.0, 5.0)))
+                yaw.append(-90.0 + float(rng.uniform(-4.0, 4.0)))  # -90 faces -y
                 zone.append(zk)
-            k += 35
-            block_y0 += 5 * 2.9 + 4.5                 # block depth + corridor
     return np.array(pos, float), np.array(yaw, float), zone
 
 
@@ -269,57 +257,43 @@ def camera_track(pos: np.ndarray, zone: list[str], duration: float, fps: int,
     robot the camera is not actually looking at: the two cannot drift out of sync
     because they are the same data.
     """
-    # Fewer heroes on a short cut: at 30s, nine showcases give each robot under two
-    # seconds and the film reads as a rush. Six gives each a real beat.
-    picks = [1, 7, 4][:max(1, heroes_per_zone)]
-    heroes: list[tuple[int, str]] = []
-    for zk in ZONE_ORDER:
-        idx = [i for i, z in enumerate(zone) if z == zk]
-        heroes += [(idx[j], zk) for j in picks]
+    # Two hero showcases, slow heavy camera, bookended wides (final brief):
+    # 0-5 establishing / 5-10 approach / 10-14 isolate hero 1 / 14-18 action 1
+    # 18-21 lateral transition / 21-25 action 2 / 25-30 pull-back echo.
+    def nearest(px, py, zk):
+        best, bi = 1e18, 0
+        for i, z in enumerate(zone):
+            if z != zk:
+                continue
+            d = (pos[i][0] - px) ** 2 + (pos[i][1] - py) ** 2
+            if d < best:
+                best, bi = d, i
+        return bi
+
+    h1 = nearest(0.8, 2.0, "defense")
+    h2 = nearest(16.5, 2.0, "attack")
+    p1, p2 = pos[h1], pos[h2]
 
     K: list[tuple[float, list, list, float]] = []
     add = lambda t, e, tg, f: K.append((t, list(e), list(tg), f))
     anno: list[dict] = []
 
-    # 0-6s   low wide: formations receding toward the monument skyline, horizon
-    # held in the upper third so the heritage backdrop is part of the frame
-    add(0.0, [-2.0, -42.0, 6.0], [0.0, 30.0, 8.5], 46.0)
-    add(6.0, [ 1.5, -28.0, 8.0], [0.0, 12.0, 4.5], 44.0)
-    # 6-14s  descend, drifting left over the white floor toward the beginner box
-    add(10.0, [-5.0, -19.0, 9.5], [-8.0, 0.5, 1.15], 43.0)
-    add(14.0, [-12.0, -13.0, 6.2], [ZONE_CX["beginner"], 0.0, 1.15], 41.0)
-
-    t = 14.0
-    per = (50.0 - 14.0) / len(heroes)            # 4s per showcased humanoid
-    for n_i, (hi, zk) in enumerate(heroes):
-        p = pos[hi]
-        tgt = [p[0], p[1], 1.05]
-        style = n_i % 3
-        if style == 0:                            # slow push in, staying elevated
-            add(t + per * 0.10, [p[0] - 2.8, p[1] - 5.4, 4.3], tgt, 40.0)
-            add(t + per * 0.90, [p[0] - 1.5, p[1] - 4.0, 4.0], tgt, 36.0)
-        elif style == 1:                          # controlled orbit
-            for u, e in zip(np.linspace(0.10, 0.90, 5),
-                            orbit_points(p, 4.2, 4.1, np.deg2rad(236), np.deg2rad(298), 5)):
-                add(t + per * u, e, tgt, 38.0)
-        else:                                     # gentle crane down
-            add(t + per * 0.10, [p[0] - 2.2, p[1] - 4.6, 5.8], tgt, 41.0)
-            add(t + per * 0.90, [p[0] - 1.7, p[1] - 4.2, 3.9], tgt, 35.0)
-        # label window sits inside the move, so it fades in after the camera settles
-        anno.append({"robot": int(hi), "zone": zk,
-                     "label": ZONE_LABELS[zk][n_i % len(ZONE_LABELS[zk])],
-                     "title": ZONE_TITLE[zk],
-                     "t0": t + per * 0.22, "t1": t + per * 0.94})
-        t += per
-
-    # 50-55s  pull back over the arena, all three boxes together again
-    add(52.0, [ 2.0, -19.0, 7.5], [0.0, 6.0, 3.5], 44.0)
-    # 55-60s  final crane back: the full army with the monuments on the horizon
-    add(56.5, [ 0.5, -36.0, 10.0], [0.0, 22.0, 8.5], 47.0)
-    add(60.0, [-1.0, -52.0, 13.0], [0.0, 40.0, 11.5], 48.0)
+    add(0.0, [-34.0, -52.0, 20.0], [4.0, 26.0, 6.0], 46.0)
+    add(5.0, [-26.0, -44.0, 16.0], [2.0, 22.0, 5.0], 45.0)
+    add(10.0, [-8.0, -22.0, 7.5], [0.0, 8.0, 1.6], 42.0)
+    add(14.0, [p1[0] - 2.4, p1[1] - 5.2, 2.6], [p1[0], p1[1], 1.1], 38.0)
+    add(18.0, [p1[0] - 1.6, p1[1] - 4.6, 2.2], [p1[0], p1[1], 1.05], 36.0)
+    anno.append({"robot": int(h1), "zone": zone[h1], "label": "", "title": "",
+                 "t0": 13.5, "t1": 17.8})
+    add(21.0, [p2[0] - 4.5, p2[1] - 7.5, 3.4], [p2[0], p2[1], 1.2], 40.0)
+    add(25.0, [p2[0] - 1.8, p2[1] - 4.8, 2.1], [p2[0], p2[1], 1.05], 36.0)
+    anno.append({"robot": int(h2), "zone": zone[h2], "label": "", "title": "",
+                 "t0": 20.8, "t1": 24.8})
+    add(28.0, [-14.0, -34.0, 11.0], [0.0, 18.0, 4.0], 44.0)
+    add(30.0, [-30.0, -50.0, 19.0], [3.0, 25.0, 6.0], 46.0)
 
     K.sort(key=lambda r: r[0])
-    scale = duration / 60.0
+    scale = duration / 30.0
     tk = np.array([k[0] for k in K]) * scale
     eye = np.array([k[1] for k in K]); tgt = np.array([k[2] for k in K])
     fov = np.array([[k[3]] for k in K])

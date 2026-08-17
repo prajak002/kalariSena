@@ -351,20 +351,21 @@ def build_lighting(scale=1.0, outdoor=False, golden=False):
         rng.inputs["From Max"].default_value = 0.15
         nt.links.new(rng.outputs["Result"], ramp.inputs["Fac"])
         if golden:
-            # Zenith stays below 1.0 after the 2.2x world strength, or AgX's
-            # highlight rolloff bleaches the top of the sky toward white.
-            ramp.color_ramp.elements[0].color = (0.98, 0.80, 0.55, 1.0)
-            ramp.color_ramp.elements[1].color = (0.11, 0.26, 0.44, 1.0)
+            # Sunset grade: molten gold at the horizon rolling into a dusty
+            # amber-rose zenith. Kept below 1.0 after the 2.2x world strength,
+            # or AgX's highlight rolloff bleaches the sky toward white.
+            ramp.color_ramp.elements[0].color = (1.0, 0.56, 0.20, 1.0)
+            ramp.color_ramp.elements[1].color = (0.30, 0.19, 0.26, 1.0)
         else:
             ramp.color_ramp.elements[0].color = (0.92, 0.88, 0.78, 1.0)
             ramp.color_ramp.elements[1].color = (0.20, 0.42, 0.88, 1.0)
         nt.links.new(ramp.outputs["Color"], bgo.inputs["Color"])
         bgo.inputs["Strength"].default_value = 2.2 * scale
         sd = bpy.data.lights.new("sun", type="SUN")
-        sd.energy = (4.0 if golden else 4.5) * scale
+        sd.energy = (3.4 if golden else 4.5) * scale
         sd.angle = np.radians(0.53)
-        sd.color = (1.0, 0.80, 0.58) if golden else (1.0, 0.95, 0.88)
-        elev = 16.0 if golden else 35.0
+        sd.color = (1.0, 0.58, 0.30) if golden else (1.0, 0.95, 0.88)
+        elev = 9.0 if golden else 35.0
         sun = bpy.data.objects.new("sun", sd)
         # Azimuth lights the formations' camera-facing side, not the monument
         # backs: key from front-right of the commander view.
@@ -453,8 +454,9 @@ def main():
                 for k, v in S["banners"].items()}
 
     # Big enough to meet the horizon in the wide shots: monuments placed a few
-    # hundred metres out must stand on ground, not float past the floor's edge.
-    bpy.ops.mesh.primitive_plane_add(size=900, location=(0, 0, 0))
+    # hundred metres out — and the distant hills beyond them — must stand on
+    # ground, not float past the floor's edge.
+    bpy.ops.mesh.primitive_plane_add(size=2600, location=(0, 0, 0))
     fl = bpy.context.active_object
     fl.data.materials.append(floor_mat)
 
@@ -511,6 +513,34 @@ def main():
 
     if a.monuments:
         import_monuments(a.monuments)
+
+    if a.outdoor:
+        # Distant hills: soft squashed mounds far beyond the monuments, heavily
+        # mixed toward the horizon colour so they read as an atmospheric
+        # silhouette line, never as scenery competing with the architecture.
+        hm = bpy.data.materials.new("hills")
+        hm.use_nodes = True
+        nth = hm.node_tree
+        hb = nth.nodes["Principled BSDF"]
+        hb.inputs["Base Color"].default_value = (0.36, 0.28, 0.24, 1.0)
+        hb.inputs["Roughness"].default_value = 1.0
+        hem = nth.nodes.new("ShaderNodeEmission")
+        hem.inputs["Color"].default_value = (0.96, 0.62, 0.36, 1.0)
+        hmix = nth.nodes.new("ShaderNodeMixShader")
+        hmix.inputs["Fac"].default_value = 0.72
+        outn = next(n for n in nth.nodes if n.type == "OUTPUT_MATERIAL")
+        nth.links.new(hb.outputs["BSDF"], hmix.inputs[1])
+        nth.links.new(hem.outputs["Emission"], hmix.inputs[2])
+        nth.links.new(hmix.outputs["Shader"], outn.inputs["Surface"])
+        for hx, hy, r, h in ((-520, 800, 340, 85), (-160, 900, 400, 110),
+                             (230, 840, 360, 95), (600, 780, 300, 75),
+                             (-880, 720, 270, 65), (900, 800, 290, 70)):
+            bpy.ops.mesh.primitive_uv_sphere_add(radius=r, location=(hx, hy, 0),
+                                                 segments=24, ring_count=12)
+            ob = bpy.context.active_object
+            ob.scale = (1.0, 1.0, h / r)
+            ob.data.materials.append(hm)
+        print("[arena] 6 distant hills placed")
 
     # ---- camera -----------------------------------------------------------
     cd = bpy.data.cameras.new("cam")

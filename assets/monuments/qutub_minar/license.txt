@@ -1,0 +1,11 @@
+Model Information:
+* title:	Qutubminar
+* source:	https://sketchfab.com/3d-models/qutubminar-8777afc0c80549d1abb7c0f28832bb4b
+* author:	popingo (https://sketchfab.com/popingo)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Qutubminar" (https://sketchfab.com/3d-models/qutubminar-8777afc0c80549d1abb7c0f28832bb4b) by popingo (https://sketchfab.com/popingo) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
