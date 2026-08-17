@@ -237,19 +237,23 @@ def build_lighting(scale=1.0, outdoor=False, golden=False):
         nt = world.node_tree
         bgo = nt.nodes["Background"]
         tc = nt.nodes.new("ShaderNodeTexCoord")
+        nrm = nt.nodes.new("ShaderNodeVectorMath")
+        nrm.operation = "NORMALIZE"
         sep = nt.nodes.new("ShaderNodeSeparateXYZ")
         rng = nt.nodes.new("ShaderNodeMapRange")
         ramp = nt.nodes.new("ShaderNodeValToRGB")
-        nt.links.new(tc.outputs["Generated"], sep.inputs["Vector"])
+        nt.links.new(tc.outputs["Generated"], nrm.inputs[0])
+        nt.links.new(nrm.outputs["Vector"], sep.inputs["Vector"])
         nt.links.new(sep.outputs["Z"], rng.inputs["Value"])
-        # Generated coords in a world shader come through sign-flipped relative
-        # to the view ray, so the range runs positive-to-negative on purpose.
-        rng.inputs["From Min"].default_value = 0.05
-        rng.inputs["From Max"].default_value = -0.04
+        # Warm at and below the horizon (ground haze), full blue by ~9 deg up.
+        rng.inputs["From Min"].default_value = 0.0
+        rng.inputs["From Max"].default_value = 0.15
         nt.links.new(rng.outputs["Result"], ramp.inputs["Fac"])
         if golden:
+            # Zenith stays below 1.0 after the 2.2x world strength, or AgX's
+            # highlight rolloff bleaches the top of the sky toward white.
             ramp.color_ramp.elements[0].color = (0.98, 0.80, 0.55, 1.0)
-            ramp.color_ramp.elements[1].color = (0.16, 0.34, 0.74, 1.0)
+            ramp.color_ramp.elements[1].color = (0.11, 0.26, 0.44, 1.0)
         else:
             ramp.color_ramp.elements[0].color = (0.92, 0.88, 0.78, 1.0)
             ramp.color_ramp.elements[1].color = (0.20, 0.42, 0.88, 1.0)
@@ -261,7 +265,9 @@ def build_lighting(scale=1.0, outdoor=False, golden=False):
         sd.color = (1.0, 0.80, 0.58) if golden else (1.0, 0.95, 0.88)
         elev = 16.0 if golden else 35.0
         sun = bpy.data.objects.new("sun", sd)
-        sun.rotation_euler = (np.radians(90 - elev), 0, np.radians(135.0))
+        # Azimuth lights the formations' camera-facing side, not the monument
+        # backs: key from front-right of the commander view.
+        sun.rotation_euler = (np.radians(90 - elev), 0, np.radians(-35.0))
         bpy.context.collection.objects.link(sun)
         return
     bg = world.node_tree.nodes["Background"]

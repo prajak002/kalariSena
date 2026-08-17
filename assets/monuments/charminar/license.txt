@@ -1,0 +1,11 @@
+Model Information:
+* title:	Charminar
+* source:	https://sketchfab.com/3d-models/charminar-bb880d064036496ca14ebac08a243af0
+* author:	Shreyas (https://sketchfab.com/atarangtar)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Charminar" (https://sketchfab.com/3d-models/charminar-bb880d064036496ca14ebac08a243af0) by Shreyas (https://sketchfab.com/atarangtar) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

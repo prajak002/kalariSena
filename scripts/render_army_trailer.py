@@ -283,8 +283,8 @@ def camera_track(pos: np.ndarray, zone: list[str], duration: float, fps: int,
 
     # 0-6s   low wide: formations receding toward the monument skyline, horizon
     # held in the upper third so the heritage backdrop is part of the frame
-    add(0.0, [-2.0, -52.0, 7.5], [0.0, 35.0, 10.0], 48.0)
-    add(6.0, [ 1.5, -34.0, 9.5], [0.0, 14.0, 5.0], 45.0)
+    add(0.0, [-2.0, -42.0, 6.0], [0.0, 30.0, 8.5], 46.0)
+    add(6.0, [ 1.5, -28.0, 8.0], [0.0, 12.0, 4.5], 44.0)
     # 6-14s  descend, drifting left over the white floor toward the beginner box
     add(10.0, [-5.0, -19.0, 9.5], [-8.0, 0.5, 1.15], 43.0)
     add(14.0, [-12.0, -13.0, 6.2], [ZONE_CX["beginner"], 0.0, 1.15], 41.0)
