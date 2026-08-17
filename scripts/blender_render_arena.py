@@ -77,6 +77,13 @@ def parse():
                     help="open-air war-platform look: Nishita blue sky + sun "
                          "instead of the white studio, warm red-earth floor, "
                          "punchy AgX grade")
+    ap.add_argument("--golden", action="store_true",
+                    help="golden-hour variant of --outdoor: low warm sun, "
+                         "long shadows, warmer horizon")
+    ap.add_argument("--monuments", default=None,
+                    help="JSON layout of heritage models to import as background "
+                         "statics: [{file,x,y,yaw,width}, ...]; paths relative "
+                         "to the JSON's directory")
     return ap.parse_args(script_argv())
 
 
@@ -162,7 +169,54 @@ def mat_banner(name, image_path):
     return m
 
 
-def build_lighting(scale=1.0, outdoor=False):
+def import_monuments(layout_path):
+    """Import heritage glTF/GLB models as background statics.
+
+    Each entry: {file, x, y, yaw, width}. The model is parented to an empty,
+    uniformly scaled so its bounding-box width equals `width` metres, grounded
+    at z=0, then placed. Keeps source textures untouched.
+    """
+    base = os.path.dirname(os.path.abspath(layout_path))
+    entries = json.load(open(layout_path))
+    for ent in entries:
+        path = os.path.join(base, ent["file"])
+        if not os.path.exists(path):
+            print(f"[arena] monument {ent['file']} not present yet, skipping")
+            continue
+        before = set(bpy.data.objects)
+        bpy.ops.import_scene.gltf(filepath=path)
+        new = [o for o in bpy.data.objects if o not in before]
+        meshes = [o for o in new if o.type == "MESH"]
+        if not meshes:
+            print(f"[arena] WARNING: no meshes in {path}")
+            continue
+        roots = [o for o in new if o.parent not in new]
+        anchor = bpy.data.objects.new(f"monument_{ent['file']}", None)
+        bpy.context.collection.objects.link(anchor)
+        for r in roots:
+            r.parent = anchor
+        deps = bpy.context.evaluated_depsgraph_get()
+        lo = np.array([np.inf] * 3)
+        hi = np.array([-np.inf] * 3)
+        for o in meshes:
+            for c in o.evaluated_get(deps).bound_box:
+                w = o.matrix_world @ mathutils.Vector(c)
+                lo = np.minimum(lo, np.array(w))
+                hi = np.maximum(hi, np.array(w))
+        span = hi - lo
+        s = ent["width"] / max(span[0], span[1], 1e-6)
+        yaw = np.radians(ent.get("yaw", 0.0))
+        anchor.scale = (s, s, s)
+        anchor.rotation_euler = (0, 0, yaw)
+        centre = (lo + hi) / 2.0
+        cx = centre[0] * s * np.cos(yaw) - centre[1] * s * np.sin(yaw)
+        cy = centre[0] * s * np.sin(yaw) + centre[1] * s * np.cos(yaw)
+        anchor.location = (ent["x"] - cx, ent["y"] - cy, -lo[2] * s + 0.02)
+        print(f"[arena] monument {ent['file']}: span {span.round(1)} "
+              f"scale {s:.3f} at ({ent['x']}, {ent['y']})")
+
+
+def build_lighting(scale=1.0, outdoor=False, golden=False):
     """Large soft key + cool rim + overhead wash, plus a bright world.
 
     Area lights, not point lights: soft shadows are most of why a Cycles frame reads
@@ -193,16 +247,21 @@ def build_lighting(scale=1.0, outdoor=False):
         rng.inputs["From Min"].default_value = 0.05
         rng.inputs["From Max"].default_value = -0.04
         nt.links.new(rng.outputs["Result"], ramp.inputs["Fac"])
-        ramp.color_ramp.elements[0].color = (0.92, 0.88, 0.78, 1.0)
-        ramp.color_ramp.elements[1].color = (0.20, 0.42, 0.88, 1.0)
+        if golden:
+            ramp.color_ramp.elements[0].color = (0.98, 0.80, 0.55, 1.0)
+            ramp.color_ramp.elements[1].color = (0.16, 0.34, 0.74, 1.0)
+        else:
+            ramp.color_ramp.elements[0].color = (0.92, 0.88, 0.78, 1.0)
+            ramp.color_ramp.elements[1].color = (0.20, 0.42, 0.88, 1.0)
         nt.links.new(ramp.outputs["Color"], bgo.inputs["Color"])
         bgo.inputs["Strength"].default_value = 2.2 * scale
         sd = bpy.data.lights.new("sun", type="SUN")
-        sd.energy = 4.5 * scale
+        sd.energy = (4.0 if golden else 4.5) * scale
         sd.angle = np.radians(0.53)
-        sd.color = (1.0, 0.95, 0.88)
+        sd.color = (1.0, 0.80, 0.58) if golden else (1.0, 0.95, 0.88)
+        elev = 16.0 if golden else 35.0
         sun = bpy.data.objects.new("sun", sd)
-        sun.rotation_euler = (np.radians(90 - 35.0), 0, np.radians(135.0))
+        sun.rotation_euler = (np.radians(90 - elev), 0, np.radians(135.0))
         bpy.context.collection.objects.link(sun)
         return
     bg = world.node_tree.nodes["Background"]
@@ -279,13 +338,16 @@ def main():
             me.materials.append(shell)
 
     # ---- static set: floor, zone lines, barriers, banners -----------------
+    a.outdoor = a.outdoor or a.golden
     floor_mat, line_mat = mat_floor(a.outdoor), mat_metal("zone_line", (0.10, 0.12, 0.17), 0.5, 0.0)
     barrier_mat = mat_metal("barrier", (0.86, 0.87, 0.90), 0.35, 0.0)
     ban_mats = {k: mat_banner(k, os.path.join(a.assets, os.path.basename(os.path.dirname(v)),
                                               os.path.basename(v)))
                 for k, v in S["banners"].items()}
 
-    bpy.ops.mesh.primitive_plane_add(size=140, location=(0, 0, 0))
+    # Big enough to meet the horizon in the wide shots: monuments placed a few
+    # hundred metres out must stand on ground, not float past the floor's edge.
+    bpy.ops.mesh.primitive_plane_add(size=900, location=(0, 0, 0))
     fl = bpy.context.active_object
     fl.data.materials.append(floor_mat)
 
@@ -338,7 +400,10 @@ def main():
         ob.rotation_mode = "QUATERNION"
         ob.rotation_quaternion = mathutils.Quaternion(st["quat"])
 
-    build_lighting(a.lightscale, a.outdoor)
+    build_lighting(a.lightscale, a.outdoor, a.golden)
+
+    if a.monuments:
+        import_monuments(a.monuments)
 
     # ---- camera -----------------------------------------------------------
     cd = bpy.data.cameras.new("cam")

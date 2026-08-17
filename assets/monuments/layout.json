@@ -1,0 +1,7 @@
+[
+  {"file": "taj_mahal/scene.gltf", "x": -20, "y": 190, "yaw": 0, "width": 110},
+  {"file": "red_fort/source/model.glb", "x": 55, "y": 210, "yaw": 0, "width": 130},
+  {"file": "charminar/scene.gltf", "x": -60, "y": 110, "yaw": 25, "width": 40},
+  {"file": "india_gate/scene.gltf", "x": 70, "y": 120, "yaw": -20, "width": 55},
+  {"file": "gateway_of_india/scene.gltf", "x": 75, "y": 60, "yaw": -35, "width": 30}
+]
