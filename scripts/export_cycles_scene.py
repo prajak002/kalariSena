@@ -124,8 +124,8 @@ def main() -> int:
     for a in annos:
         cid = clips[a["robot"]]
         a["label"] = cid.split("_", 1)[-1].replace("_", " ").upper()
-        a["title"] = (f"POSE {library.index(cid) + 1:02d}/{len(library)} · "
-                      f"{a['zone'].upper()}")
+        a["title"] = (f"KALARISENA · {a['zone'].upper()} · "
+                      f"POSE {library.index(cid) + 1:02d}/{len(library)}")
     f0 = int(round(args.start * args.fps))
     f1 = min(len(E), f0 + int(round(args.duration * args.fps)))
     frames = range(f0, f1)

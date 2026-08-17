@@ -169,6 +169,58 @@ def mat_banner(name, image_path):
     return m
 
 
+def build_proxy(kind, width):
+    """Clean simplified silhouettes for monuments with no usable model.
+
+    Recognisable massing only — no fake detail. Returns the created objects,
+    built around the origin at real scale (metres), base at z=0.
+    """
+    objs = []
+
+    def box(name, sx, sy, sz, loc):
+        bpy.ops.mesh.primitive_cube_add(size=1, location=loc)
+        o = bpy.context.active_object
+        o.name = name
+        o.scale = (sx, sy, sz)
+        objs.append(o)
+        return o
+
+    if kind == "parliament":
+        # New Sansad Bhavan: low triangular plan with a raised rim and a
+        # central drum. Triangle via a 3-vert cylinder.
+        r = width / 2.0
+        bpy.ops.mesh.primitive_cylinder_add(vertices=3, radius=r, depth=18,
+                                            location=(0, 0, 9))
+        objs.append(bpy.context.active_object)
+        bpy.ops.mesh.primitive_cylinder_add(vertices=3, radius=r * 0.92, depth=4,
+                                            location=(0, 0, 20))
+        objs.append(bpy.context.active_object)
+        bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=r * 0.22, depth=8,
+                                            location=(0, 0, 24))
+        objs.append(bpy.context.active_object)
+    elif kind == "gateway_of_india":
+        # Gateway of India: central arch block flanked by two towers with domes.
+        w = width
+        box("g_base_l", w * 0.28, w * 0.30, 16, (-w * 0.36, 0, 8))
+        box("g_base_r", w * 0.28, w * 0.30, 16, (w * 0.36, 0, 8))
+        box("g_lintel", w * 1.0, w * 0.30, 6, (0, 0, 19))
+        box("g_parapet", w * 1.04, w * 0.34, 2, (0, 0, 23))
+        for sx in (-1, 1):
+            bpy.ops.mesh.primitive_cylinder_add(radius=w * 0.055, depth=8,
+                                                location=(sx * w * 0.36,
+                                                          -w * 0.12, 26))
+            objs.append(bpy.context.active_object)
+            bpy.ops.mesh.primitive_uv_sphere_add(radius=w * 0.075,
+                                                 location=(sx * w * 0.36,
+                                                           -w * 0.12, 30.5))
+            objs.append(bpy.context.active_object)
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=w * 0.16, location=(0, 0, 25))
+        objs.append(bpy.context.active_object)
+    for o in objs:
+        o.data.materials.clear()
+    return objs
+
+
 def import_monuments(layout_path):
     """Import heritage glTF/GLB models as background statics.
 
@@ -179,19 +231,23 @@ def import_monuments(layout_path):
     base = os.path.dirname(os.path.abspath(layout_path))
     entries = json.load(open(layout_path))
     for ent in entries:
-        path = os.path.join(base, ent["file"])
-        if not os.path.exists(path):
-            print(f"[arena] monument {ent['file']} not present yet, skipping")
-            continue
         before = set(bpy.data.objects)
-        if path.endswith(".blend"):
-            with bpy.data.libraries.load(path) as (src, dst):
-                dst.objects = list(src.objects)
-            for o in dst.objects:
-                if o is not None:
-                    bpy.context.collection.objects.link(o)
+        if ent.get("proxy"):
+            build_proxy(ent["proxy"], ent["width"])
+            ent = dict(ent, file=ent["proxy"])
         else:
-            bpy.ops.import_scene.gltf(filepath=path)
+            path = os.path.join(base, ent["file"])
+            if not os.path.exists(path):
+                print(f"[arena] monument {ent['file']} not present yet, skipping")
+                continue
+            if path.endswith(".blend"):
+                with bpy.data.libraries.load(path) as (src, dst):
+                    dst.objects = list(src.objects)
+                for o in dst.objects:
+                    if o is not None:
+                        bpy.context.collection.objects.link(o)
+            else:
+                bpy.ops.import_scene.gltf(filepath=path)
         new = [o for o in bpy.data.objects if o not in before]
         if ent.get("color"):
             m = bpy.data.materials.new(f"mono_{ent['file']}")
