@@ -1,9 +1,12 @@
 [
-  {"file": "taj_mahal/scene.gltf", "x": -10, "y": 215, "yaw": 0, "width": 100,
-   "color": [0.85, 0.80, 0.72]},
-  {"file": "red_fort/source/model.glb", "x": 55, "y": 220, "yaw": 0, "width": 110},
-  {"file": "charminar/scene.gltf", "x": -62, "y": 110, "yaw": 25, "width": 40},
-  {"file": "india_gate/india_gate.blend", "x": 100, "y": 155, "yaw": -15, "width": 30,
-   "color": [0.78, 0.62, 0.45]},
-  {"file": "gateway_of_india/scene.gltf", "x": 75, "y": 60, "yaw": -35, "width": 30}
+  {"file": "taj_mahal/scene.gltf", "x": -18, "y": 330, "yaw": 0, "width": 160,
+   "color": [0.85, 0.80, 0.72], "haze": 0.45},
+  {"file": "red_fort/source/model.glb", "x": 110, "y": 390, "yaw": -8, "width": 180,
+   "haze": 0.52},
+  {"file": "charminar/scene.gltf", "x": -80, "y": 140, "yaw": 30, "width": 45,
+   "haze": 0.18},
+  {"file": "india_gate/india_gate.blend", "x": 105, "y": 210, "yaw": -18, "width": 38,
+   "color": [0.78, 0.62, 0.45], "haze": 0.30},
+  {"file": "gateway_of_india/scene.gltf", "x": 130, "y": 90, "yaw": -40, "width": 30,
+   "haze": 0.10}
 ]

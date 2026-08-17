@@ -203,6 +203,34 @@ def import_monuments(layout_path):
                 if o is not None and o.type == "MESH":
                     o.data.materials.clear()
                     o.data.materials.append(m)
+        # Atmospheric perspective: mix every material toward the horizon colour
+        # by the entry's haze factor, so distant landmarks sit IN the air
+        # instead of reading as pasted assets. Static distance -> static mix.
+        hz = float(ent.get("haze", 0.0))
+        if hz > 0.0:
+            seen = set()
+            for o in new:
+                if o is None or o.type != "MESH":
+                    continue
+                for slot in o.data.materials:
+                    if slot is None or slot.name in seen:
+                        continue
+                    seen.add(slot.name)
+                    nt2 = slot.node_tree
+                    out = next((n for n in nt2.nodes
+                                if n.type == "OUTPUT_MATERIAL" and n.is_active_output),
+                               None)
+                    if out is None or not out.inputs["Surface"].links:
+                        continue
+                    src = out.inputs["Surface"].links[0].from_socket
+                    em = nt2.nodes.new("ShaderNodeEmission")
+                    em.inputs["Color"].default_value = (0.92, 0.87, 0.76, 1.0)
+                    em.inputs["Strength"].default_value = 1.0
+                    mix = nt2.nodes.new("ShaderNodeMixShader")
+                    mix.inputs["Fac"].default_value = hz
+                    nt2.links.new(src, mix.inputs[1])
+                    nt2.links.new(em.outputs["Emission"], mix.inputs[2])
+                    nt2.links.new(mix.outputs["Shader"], out.inputs["Surface"])
         meshes = [o for o in new if o.type == "MESH"]
         if not meshes:
             print(f"[arena] WARNING: no meshes in {path}")
