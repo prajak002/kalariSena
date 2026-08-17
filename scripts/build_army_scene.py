@@ -114,23 +114,9 @@ def zone_markings() -> list[ET.Element]:
     texture, so the lines stay crisp at any camera distance instead of turning to
     mush when the camera pushes in for a close-up.
     """
-    out, t = [], 0.004
-    for z in ZONES:
-        cx = z["cx"]
-        for (sx, sy, px, py) in ((ZONE_HALF_X, 0.05, 0, ZONE_HALF_Y),
-                                 (ZONE_HALF_X, 0.05, 0, -ZONE_HALF_Y),
-                                 (0.05, ZONE_HALF_Y, ZONE_HALF_X, 0),
-                                 (0.05, ZONE_HALF_Y, -ZONE_HALF_X, 0)):
-            out.append(ET.Element("geom", type="box", material="zone_line",
-                                  pos=f"{cx + px} {py} {t * 2}",
-                                  size=f"{sx} {sy} {t * 0.8}", contype="0", conaffinity="0"))
-        for ox in (-1, 1):                       # corner ticks, inset
-            for oy in (-1, 1):
-                out.append(ET.Element(
-                    "geom", type="box", material="zone_line",
-                    pos=f"{cx + ox * (ZONE_HALF_X - 0.75)} {oy * (ZONE_HALF_Y - 0.05)} {t*2}",
-                    size=f"0.75 0.035 {t}", contype="0", conaffinity="0"))
-    return out
+    # One continuous facility, no rectangles around individual groups: the
+    # formation itself communicates the three levels (final art direction).
+    return []
 
 
 def banners() -> list[ET.Element]:
@@ -146,43 +132,62 @@ def banners() -> list[ET.Element]:
     """
     out = []
     order = ["kalarisena_hero", "pragya_velvet"]
-    back_y = ZONE_HALF_Y + 4.4
+    # One continuous perimeter enclosing the ENTIRE training ground: front
+    # courts and every backfield block inside a single branded boundary.
+    HX, FRONT_Y, BACK_Y = 26.0, -12.0, 52.0
     # quats: rotate the plane's +z normal to face the arena interior
     FACE_S = "0.7071 0.7071 0 0"      # normal -> -y  (back wall, faces the camera)
-    # local x -> along the wall, local y -> world up, normal -> inward.
+    FACE_N = "0.7071 -0.7071 0 0"     # normal -> +y  (front wall, faces inward)
     FACE_E = "0.5 0.5 0.5 0.5"        # normal -> +x  (left wall)
     FACE_W = "0.5 0.5 -0.5 -0.5"      # normal -> -x  (right wall)
 
-    x, i = -21.0, 0
-    while x < 21.0:                                        # back run
-        nm = order[i % 2]
-        w = BANNER_H * BANNER_ASPECT[nm] / 2.0
-        out.append(ET.Element("geom", type="plane", material=nm, quat=FACE_S,
-                              pos=f"{x + w} {back_y} {BANNER_H / 2}",
-                              size=f"{w} {BANNER_H / 2} 0.1",
-                              contype="0", conaffinity="0"))
-        x += 2 * w + 0.30
-        i += 1
-    for sx, q in ((-21.5, FACE_E), (21.5, FACE_W)):        # side runs
-        y, i = -11.0, 0
-        while y < 7.0:
-            nm = order[(i + 1) % 2]
+    def run_x(yline, quat, x0, x1, start_i=0):
+        x, i = x0, start_i
+        while True:
+            nm = order[i % 2]
             w = BANNER_H * BANNER_ASPECT[nm] / 2.0
-            out.append(ET.Element("geom", type="plane", material=nm, quat=q,
-                                  pos=f"{sx} {y + w} {BANNER_H / 2}",
+            if x + 2 * w > x1:
+                break
+            out.append(ET.Element("geom", type="plane", material=nm, quat=quat,
+                                  pos=f"{x + w} {yline} {BANNER_H / 2}",
+                                  size=f"{w} {BANNER_H / 2} 0.1",
+                                  contype="0", conaffinity="0"))
+            x += 2 * w + 0.30
+            i += 1
+
+    def run_y(xline, quat, y0, y1, start_i=1):
+        y, i = y0, start_i
+        while True:
+            nm = order[i % 2]
+            w = BANNER_H * BANNER_ASPECT[nm] / 2.0
+            if y + 2 * w > y1:
+                break
+            out.append(ET.Element("geom", type="plane", material=nm, quat=quat,
+                                  pos=f"{xline} {y + w} {BANNER_H / 2}",
                                   size=f"{w} {BANNER_H / 2} 0.1",
                                   contype="0", conaffinity="0"))
             y += 2 * w + 0.30
             i += 1
-    # low barrier the boards sit on, so they read as built in rather than floating
-    out.append(ET.Element("geom", type="box", material="barrier",
-                          pos=f"0 {back_y + 0.12} {BANNER_H / 2}",
-                          size=f"21.5 0.08 {BANNER_H / 2 + 0.05}",
-                          contype="0", conaffinity="0"))
-    for sx in (-21.6, 21.6):
+
+    run_x(BACK_Y, FACE_S, -HX + 0.4, HX - 0.4)                 # back run
+    run_y(-(HX + 0.5), FACE_E, FRONT_Y + 0.5, BACK_Y - 0.5)    # left run
+    run_y(HX + 0.5, FACE_W, FRONT_Y + 0.5, BACK_Y - 0.5)       # right run
+    # front corner returns: the camera flies over the open centre, but from
+    # every wide angle the boundary reads as a closed rectangle
+    run_x(FRONT_Y, FACE_N, -HX + 0.4, -HX + 10.0)
+    run_x(FRONT_Y, FACE_N, HX - 10.0, HX - 0.4, start_i=1)
+    # continuous low barrier under the boards, all four sides
+    for ypos, hx in ((BACK_Y + 0.12, HX + 0.7), (FRONT_Y - 0.12, HX + 0.7)):
         out.append(ET.Element("geom", type="box", material="barrier",
-                              pos=f"{sx} -2.0 {BANNER_H / 2}",
-                              size=f"0.08 9.2 {BANNER_H / 2 + 0.05}",
+                              pos=f"0 {ypos} {BANNER_H / 2}",
+                              size=f"{hx} 0.08 {BANNER_H / 2 + 0.05}",
+                              contype="0", conaffinity="0"))
+    ymid = (FRONT_Y + BACK_Y) / 2.0
+    yhalf = (BACK_Y - FRONT_Y) / 2.0 + 0.1
+    for sx in (-(HX + 0.6), HX + 0.6):
+        out.append(ET.Element("geom", type="box", material="barrier",
+                              pos=f"{sx} {ymid} {BANNER_H / 2}",
+                              size=f"0.08 {yhalf} {BANNER_H / 2 + 0.05}",
                               contype="0", conaffinity="0"))
     return out
 
