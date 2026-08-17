@@ -73,6 +73,10 @@ def parse():
     ap.add_argument("--floormat-at", default="0,0",
                     help="semicolon-separated x,y centres, one mat each, "
                          "e.g. '-12,0;0,0;12,0' for every court of the strip")
+    ap.add_argument("--outdoor", action="store_true",
+                    help="open-air war-platform look: Nishita blue sky + sun "
+                         "instead of the white studio, warm red-earth floor, "
+                         "punchy AgX grade")
     return ap.parse_args(script_argv())
 
 
@@ -106,15 +110,34 @@ def mat_metal(name, base, rough, metallic=1.0):
     return m
 
 
-def mat_floor():
+def mat_floor(outdoor=False):
     """White, polished, slightly rough: a real specular floor with true reflections.
 
     This is the single biggest difference from the MuJoCo version, where the floor
     'reflection' was a flat planar fake.
+
+    Outdoor variant: packed red kalari earth — two tones mixed by broad noise,
+    matte, with a subtle bump so raking sunlight reads as ground, not plastic.
     """
     m = bpy.data.materials.new("arena_floor")
     m.use_nodes = True
     b = m.node_tree.nodes["Principled BSDF"]
+    if outdoor:
+        nt = m.node_tree
+        noise = nt.nodes.new("ShaderNodeTexNoise")
+        noise.inputs["Scale"].default_value = 0.35
+        noise.inputs["Detail"].default_value = 8.0
+        ramp = nt.nodes.new("ShaderNodeValToRGB")
+        ramp.color_ramp.elements[0].color = (0.155, 0.052, 0.022, 1.0)
+        ramp.color_ramp.elements[1].color = (0.385, 0.135, 0.048, 1.0)
+        nt.links.new(noise.outputs["Fac"], ramp.inputs["Fac"])
+        nt.links.new(ramp.outputs["Color"], b.inputs["Base Color"])
+        b.inputs["Roughness"].default_value = 0.85
+        bump = nt.nodes.new("ShaderNodeBump")
+        bump.inputs["Strength"].default_value = 0.15
+        nt.links.new(noise.outputs["Fac"], bump.inputs["Height"])
+        nt.links.new(bump.outputs["Normal"], b.inputs["Normal"])
+        return m
     b.inputs["Base Color"].default_value = (0.90, 0.91, 0.93, 1.0)
     b.inputs["Metallic"].default_value = 0.0
     b.inputs["Roughness"].default_value = 0.13
@@ -139,15 +162,49 @@ def mat_banner(name, image_path):
     return m
 
 
-def build_lighting(scale=1.0):
+def build_lighting(scale=1.0, outdoor=False):
     """Large soft key + cool rim + overhead wash, plus a bright world.
 
     Area lights, not point lights: soft shadows are most of why a Cycles frame reads
     as photographed rather than rendered.
+
+    Outdoor variant: a physical Nishita sky carries the blue ambience and an
+    explicit sun lamp carries the key, so shadows stay crisp at low samples
+    (sun-disc-in-sky sampling is noisier than a lamp).
     """
     world = bpy.data.worlds.new("W")
     bpy.context.scene.world = world
     world.use_nodes = True
+    if outdoor:
+        # Art-directed sky, not Nishita: the camera mostly grazes the horizon,
+        # where a physical sky is always washed white. A view-direction gradient
+        # keeps a warm horizon but reaches proper blue fast enough to read in
+        # the wide shots, and still bathes the set in cool ambience from above.
+        nt = world.node_tree
+        bgo = nt.nodes["Background"]
+        tc = nt.nodes.new("ShaderNodeTexCoord")
+        sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+        rng = nt.nodes.new("ShaderNodeMapRange")
+        ramp = nt.nodes.new("ShaderNodeValToRGB")
+        nt.links.new(tc.outputs["Generated"], sep.inputs["Vector"])
+        nt.links.new(sep.outputs["Z"], rng.inputs["Value"])
+        # Generated coords in a world shader come through sign-flipped relative
+        # to the view ray, so the range runs positive-to-negative on purpose.
+        rng.inputs["From Min"].default_value = 0.05
+        rng.inputs["From Max"].default_value = -0.04
+        nt.links.new(rng.outputs["Result"], ramp.inputs["Fac"])
+        ramp.color_ramp.elements[0].color = (0.92, 0.88, 0.78, 1.0)
+        ramp.color_ramp.elements[1].color = (0.20, 0.42, 0.88, 1.0)
+        nt.links.new(ramp.outputs["Color"], bgo.inputs["Color"])
+        bgo.inputs["Strength"].default_value = 2.2 * scale
+        sd = bpy.data.lights.new("sun", type="SUN")
+        sd.energy = 4.5 * scale
+        sd.angle = np.radians(0.53)
+        sd.color = (1.0, 0.95, 0.88)
+        sun = bpy.data.objects.new("sun", sd)
+        sun.rotation_euler = (np.radians(90 - 35.0), 0, np.radians(135.0))
+        bpy.context.collection.objects.link(sun)
+        return
     bg = world.node_tree.nodes["Background"]
     bg.inputs["Color"].default_value = (0.55, 0.60, 0.68, 1.0)
     bg.inputs["Strength"].default_value = 0.55 * scale
@@ -222,7 +279,7 @@ def main():
             me.materials.append(shell)
 
     # ---- static set: floor, zone lines, barriers, banners -----------------
-    floor_mat, line_mat = mat_floor(), mat_metal("zone_line", (0.10, 0.12, 0.17), 0.5, 0.0)
+    floor_mat, line_mat = mat_floor(a.outdoor), mat_metal("zone_line", (0.10, 0.12, 0.17), 0.5, 0.0)
     barrier_mat = mat_metal("barrier", (0.86, 0.87, 0.90), 0.35, 0.0)
     ban_mats = {k: mat_banner(k, os.path.join(a.assets, os.path.basename(os.path.dirname(v)),
                                               os.path.basename(v)))
@@ -281,7 +338,7 @@ def main():
         ob.rotation_mode = "QUATERNION"
         ob.rotation_quaternion = mathutils.Quaternion(st["quat"])
 
-    build_lighting(a.lightscale)
+    build_lighting(a.lightscale, a.outdoor)
 
     # ---- camera -----------------------------------------------------------
     cd = bpy.data.cameras.new("cam")
@@ -337,8 +394,18 @@ def main():
             continue
         break
     sc.view_settings.look = "None"
+    if a.outdoor:
+        # Punchy raises contrast and saturation inside AgX's highlight rolloff --
+        # the difference between "whitish" and colourful without clipping.
+        for look in ("AgX - Punchy", "Punchy"):
+            try:
+                sc.view_settings.look = look
+            except TypeError:
+                continue
+            break
     sc.view_settings.exposure = a.exposure
     print(f"[arena] view transform {sc.view_settings.view_transform}, "
+          f"look {sc.view_settings.look}, "
           f"exposure {a.exposure:+.2f}, lightscale {a.lightscale:g}")
     sc.frame_start = a.start + 1
     sc.frame_end = (nF if a.end < 0 else min(a.end, nF))
