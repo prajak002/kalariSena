@@ -1,0 +1,11 @@
+Model Information:
+* title:	Taj Mahal
+* source:	https://sketchfab.com/3d-models/taj-mahal-df6d5328741c4abb96f3ecd4c933c7bd
+* author:	AtheneaAtlas (https://sketchfab.com/AtheneaAtlas)
+
+Model License:
+* license type:	CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)
+* requirements:	Author must be credited. No commercial use.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Taj Mahal" (https://sketchfab.com/3d-models/taj-mahal-df6d5328741c4abb96f3ecd4c933c7bd) by AtheneaAtlas (https://sketchfab.com/AtheneaAtlas) licensed under CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)

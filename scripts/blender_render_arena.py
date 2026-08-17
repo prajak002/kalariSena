@@ -184,8 +184,25 @@ def import_monuments(layout_path):
             print(f"[arena] monument {ent['file']} not present yet, skipping")
             continue
         before = set(bpy.data.objects)
-        bpy.ops.import_scene.gltf(filepath=path)
+        if path.endswith(".blend"):
+            with bpy.data.libraries.load(path) as (src, dst):
+                dst.objects = list(src.objects)
+            for o in dst.objects:
+                if o is not None:
+                    bpy.context.collection.objects.link(o)
+        else:
+            bpy.ops.import_scene.gltf(filepath=path)
         new = [o for o in bpy.data.objects if o not in before]
+        if ent.get("color"):
+            m = bpy.data.materials.new(f"mono_{ent['file']}")
+            m.use_nodes = True
+            bb = m.node_tree.nodes["Principled BSDF"]
+            bb.inputs["Base Color"].default_value = (*ent["color"], 1.0)
+            bb.inputs["Roughness"].default_value = 0.55
+            for o in new:
+                if o is not None and o.type == "MESH":
+                    o.data.materials.clear()
+                    o.data.materials.append(m)
         meshes = [o for o in new if o.type == "MESH"]
         if not meshes:
             print(f"[arena] WARNING: no meshes in {path}")

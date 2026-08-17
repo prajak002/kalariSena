@@ -194,6 +194,21 @@ def main() -> int:
     Q = np.zeros((len(frames), G, 4), np.float32)
     heads = np.zeros((len(frames), N_ROBOTS, 3), np.float32)
 
+    # A showcased hero must PERFORM its labelled move while the camera and
+    # annotation hold on it, not just sway in the held stance. Around each
+    # annotation window the hero plays its full clip once, blended in and out
+    # of the hold oscillation over 0.5s so there is no pose snap.
+    hero_win = {a_["robot"]: (a_["t0"] - 0.5, a_["t1"] + 0.5) for a_ in annos}
+
+    def pose_arrays(i, k):
+        mo = motions[i]
+        local = rot2[i] @ (mo["root_pos"][k, :2] - clip_centre[i])
+        root = np.array([pos[i, 0] + local[0], pos[i, 1] + local[1],
+                         mo["root_pos"][k, 2]])
+        quat = np.asarray(qmul_wxyz(yaw_q[i],
+                                    quat_xyzw_to_wxyz(mo["root_quat_xyzw"][k])))
+        return root, quat, mo["joint_pos"][k]
+
     for out_i, f in enumerate(frames):
         tsec = f / args.fps
         for i in range(N_ROBOTS):
@@ -204,14 +219,25 @@ def main() -> int:
             u = ((np.random.default_rng(3).uniform(0, 1, N_ROBOTS)[i]
                   + tsec * POSE_PLAYBACK * src_fps / span) % 2.0)
             k = k0 + int((u if u <= 1.0 else 2.0 - u) * span)
+            root, quat, joints = pose_arrays(i, k)
+            win = hero_win.get(i)
+            if win and win[0] <= tsec <= win[1]:
+                nclip = len(mo["root_pos"])
+                uu = (tsec - win[0]) / max(win[1] - win[0], 1e-6)
+                r2, q2, j2 = pose_arrays(i, int(uu * (nclip - 1)))
+                w = min(1.0, min(tsec - win[0], win[1] - tsec) / 0.5)
+                w = w * w * (3.0 - 2.0 * w)
+                root = (1 - w) * root + w * r2
+                if float(np.dot(quat, q2)) < 0.0:
+                    q2 = -q2
+                quat = (1 - w) * quat + w * q2
+                quat = quat / np.linalg.norm(quat)
+                joints = (1 - w) * joints + w * j2
             a = base_adr[i]
-            local = rot2[i] @ (mo["root_pos"][k, :2] - clip_centre[i])
-            d.qpos[a:a + 3] = [pos[i, 0] + local[0], pos[i, 1] + local[1],
-                               mo["root_pos"][k, 2]]
-            d.qpos[a + 3:a + 7] = qmul_wxyz(yaw_q[i],
-                                            quat_xyzw_to_wxyz(mo["root_quat_xyzw"][k]))
+            d.qpos[a:a + 3] = root
+            d.qpos[a + 3:a + 7] = quat
             for adr, col in jmap[i].items():
-                d.qpos[adr] = mo["joint_pos"][k, col]
+                d.qpos[adr] = joints[col]
         mujoco.mj_forward(m, d)
         P[out_i] = d.geom_xpos[gidx]
         for j, g in enumerate(gidx):
