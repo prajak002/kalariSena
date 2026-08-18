@@ -221,7 +221,7 @@ def build_proxy(kind, width):
     return objs
 
 
-def import_monuments(layout_path):
+def import_monuments(layout_path, golden=False):
     """Import heritage glTF/GLB models as background statics.
 
     Each entry: {file, x, y, yaw, width}. The model is parented to an empty,
@@ -280,7 +280,9 @@ def import_monuments(layout_path):
                         continue
                     src = out.inputs["Surface"].links[0].from_socket
                     em = nt2.nodes.new("ShaderNodeEmission")
-                    em.inputs["Color"].default_value = (0.92, 0.87, 0.76, 1.0)
+                    em.inputs["Color"].default_value = (
+                        (0.96, 0.66, 0.40, 1.0) if golden
+                        else (0.92, 0.87, 0.76, 1.0))
                     em.inputs["Strength"].default_value = 1.0
                     mix = nt2.nodes.new("ShaderNodeMixShader")
                     mix.inputs["Fac"].default_value = hz
@@ -512,35 +514,50 @@ def main():
     build_lighting(a.lightscale, a.outdoor, a.golden)
 
     if a.monuments:
-        import_monuments(a.monuments)
+        import_monuments(a.monuments, a.golden)
 
     if a.outdoor:
         # Distant hills: soft squashed mounds far beyond the monuments, heavily
         # mixed toward the horizon colour so they read as an atmospheric
         # silhouette line, never as scenery competing with the architecture.
-        hm = bpy.data.materials.new("hills")
-        hm.use_nodes = True
-        nth = hm.node_tree
-        hb = nth.nodes["Principled BSDF"]
-        hb.inputs["Base Color"].default_value = (0.36, 0.28, 0.24, 1.0)
-        hb.inputs["Roughness"].default_value = 1.0
-        hem = nth.nodes.new("ShaderNodeEmission")
-        hem.inputs["Color"].default_value = (0.96, 0.62, 0.36, 1.0)
-        hmix = nth.nodes.new("ShaderNodeMixShader")
-        hmix.inputs["Fac"].default_value = 0.72
-        outn = next(n for n in nth.nodes if n.type == "OUTPUT_MATERIAL")
-        nth.links.new(hb.outputs["BSDF"], hmix.inputs[1])
-        nth.links.new(hem.outputs["Emission"], hmix.inputs[2])
-        nth.links.new(hmix.outputs["Shader"], outn.inputs["Surface"])
-        for hx, hy, r, h in ((-520, 800, 340, 85), (-160, 900, 400, 110),
-                             (230, 840, 360, 95), (600, 780, 300, 75),
-                             (-880, 720, 270, 65), (900, 800, 290, 70)):
-            bpy.ops.mesh.primitive_uv_sphere_add(radius=r, location=(hx, hy, 0),
-                                                 segments=24, ring_count=12)
-            ob = bpy.context.active_object
-            ob.scale = (1.0, 1.0, h / r)
-            ob.data.materials.append(hm)
-        print("[arena] 6 distant hills placed")
+        def hill_mat(name, fac):
+            hm = bpy.data.materials.new(name)
+            hm.use_nodes = True
+            nth = hm.node_tree
+            hb = nth.nodes["Principled BSDF"]
+            hb.inputs["Base Color"].default_value = (0.34, 0.26, 0.22, 1.0)
+            hb.inputs["Roughness"].default_value = 1.0
+            hem = nth.nodes.new("ShaderNodeEmission")
+            hem.inputs["Color"].default_value = (0.96, 0.64, 0.38, 1.0)
+            hmix = nth.nodes.new("ShaderNodeMixShader")
+            hmix.inputs["Fac"].default_value = fac
+            outn = next(n for n in nth.nodes if n.type == "OUTPUT_MATERIAL")
+            nth.links.new(hb.outputs["BSDF"], hmix.inputs[1])
+            nth.links.new(hem.outputs["Emission"], hmix.inputs[2])
+            nth.links.new(hmix.outputs["Shader"], outn.inputs["Surface"])
+            return hm
+
+        # Three terrain bands: near ridge, mid range, far horizon line — each
+        # band softer and lighter than the one before (atmospheric perspective).
+        bands = [
+            (hill_mat("hills_near", 0.50),
+             ((-430, 560, 250, 42), (-30, 600, 300, 50), (400, 555, 260, 44))),
+            (hill_mat("hills_mid", 0.72),
+             ((-520, 800, 340, 80), (-160, 900, 400, 100), (230, 840, 360, 88),
+              (620, 790, 300, 70), (-880, 730, 270, 60))),
+            (hill_mat("hills_far", 0.88),
+             ((-350, 1120, 520, 95), (450, 1150, 500, 85), (0, 1200, 560, 100))),
+        ]
+        n_h = 0
+        for hm, ridge in bands:
+            for hx, hy, r, h in ridge:
+                bpy.ops.mesh.primitive_uv_sphere_add(radius=r, location=(hx, hy, 0),
+                                                     segments=24, ring_count=12)
+                ob = bpy.context.active_object
+                ob.scale = (1.0, 1.0, h / r)
+                ob.data.materials.append(hm)
+                n_h += 1
+        print(f"[arena] {n_h} hills in 3 depth bands")
 
     # ---- camera -----------------------------------------------------------
     cd = bpy.data.cameras.new("cam")

@@ -200,9 +200,15 @@ def main() -> int:
     # of the hold oscillation over 0.5s so there is no pose snap.
     hero_win = {a_["robot"]: (a_["t0"] - 0.5, a_["t1"] + 0.5) for a_ in annos}
 
-    def pose_arrays(i, k):
+    def pose_arrays(i, k, pin=True):
+        # pin=True nails the root to its formation anchor: limbs and torso
+        # animate, the rank/file position does not, so every 8x8 square stays
+        # a square. Heroes performing their showcase clip are unpinned.
         mo = motions[i]
-        local = rot2[i] @ (mo["root_pos"][k, :2] - clip_centre[i])
+        if pin:
+            local = np.zeros(2)
+        else:
+            local = rot2[i] @ (mo["root_pos"][k, :2] - clip_centre[i])
         root = np.array([pos[i, 0] + local[0], pos[i, 1] + local[1],
                          mo["root_pos"][k, 2]])
         quat = np.asarray(qmul_wxyz(yaw_q[i],
@@ -224,7 +230,7 @@ def main() -> int:
             if win and win[0] <= tsec <= win[1]:
                 nclip = len(mo["root_pos"])
                 uu = (tsec - win[0]) / max(win[1] - win[0], 1e-6)
-                r2, q2, j2 = pose_arrays(i, int(uu * (nclip - 1)))
+                r2, q2, j2 = pose_arrays(i, int(uu * (nclip - 1)), pin=False)
                 w = min(1.0, min(tsec - win[0], win[1] - tsec) / 0.5)
                 w = w * w * (3.0 - 2.0 * w)
                 root = (1 - w) * root + w * r2

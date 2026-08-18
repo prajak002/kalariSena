@@ -182,7 +182,7 @@ def formation(n: int):
                 x = bx + (c - 3.5) * SP
                 y = by + r * SP
                 pos.append([x, y, 0.0])
-                yaw.append(-90.0 + float(rng.uniform(-4.0, 4.0)))  # -90 faces -y
+                yaw.append(-90.0 + float(rng.uniform(-2.0, 2.0)))  # -90 faces -y
                 zone.append(zk)
     return np.array(pos, float), np.array(yaw, float), zone
 
@@ -278,9 +278,9 @@ def camera_track(pos: np.ndarray, zone: list[str], duration: float, fps: int,
     add = lambda t, e, tg, f: K.append((t, list(e), list(tg), f))
     anno: list[dict] = []
 
-    add(0.0, [-34.0, -52.0, 20.0], [4.0, 26.0, 6.0], 46.0)
-    add(5.0, [-26.0, -44.0, 16.0], [2.0, 22.0, 5.0], 45.0)
-    add(10.0, [-8.0, -22.0, 7.5], [0.0, 8.0, 1.6], 42.0)
+    add(0.0, [-13.0, -26.0, 13.0], [0.0, 24.0, 1.5], 37.0)
+    add(5.0, [-11.0, -23.0, 12.0], [0.0, 22.0, 1.5], 37.0)
+    add(10.0, [-5.0, -14.0, 6.0], [0.0, 8.0, 1.4], 39.0)
     add(14.0, [p1[0] - 2.4, p1[1] - 5.2, 2.6], [p1[0], p1[1], 1.1], 38.0)
     add(18.0, [p1[0] - 1.6, p1[1] - 4.6, 2.2], [p1[0], p1[1], 1.05], 36.0)
     anno.append({"robot": int(h1), "zone": zone[h1], "label": "", "title": "",
@@ -289,8 +289,8 @@ def camera_track(pos: np.ndarray, zone: list[str], duration: float, fps: int,
     add(25.0, [p2[0] - 1.8, p2[1] - 4.8, 2.1], [p2[0], p2[1], 1.05], 36.0)
     anno.append({"robot": int(h2), "zone": zone[h2], "label": "", "title": "",
                  "t0": 20.8, "t1": 24.8})
-    add(28.0, [-14.0, -34.0, 11.0], [0.0, 18.0, 4.0], 44.0)
-    add(30.0, [-30.0, -50.0, 19.0], [3.0, 25.0, 6.0], 46.0)
+    add(28.0, [-10.0, -22.0, 10.0], [0.0, 20.0, 2.0], 38.0)
+    add(30.0, [-13.0, -27.0, 13.5], [0.0, 24.0, 1.8], 37.0)
 
     K.sort(key=lambda r: r[0])
     scale = duration / 30.0
